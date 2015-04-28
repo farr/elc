@@ -42,7 +42,6 @@ if __name__ == '__main__':
     parser.add_argument('--outfile', default='depths.hdf5', help='output file name')
     parser.add_argument('--lcdir', default='lightcurves', help='lightcurve directory')
     parser.add_argument('--dur', default=12, type=int, help='duration in hours')
-    parser.add_argument('--validate', default=False, action='store_true', help='do careful validation of already-processed lightcurves')
 
     args = parser.parse_args()
 
