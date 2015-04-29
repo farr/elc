@@ -39,9 +39,9 @@ def write_elcs(hfile, elcs, ids):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process a directory of lightcurves into HDF5 single-transit depth file')
 
-    parser.add_argument('--outfile', default='depths.hdf5', help='output file name')
-    parser.add_argument('--lcdir', default='lightcurves', help='lightcurve directory')
-    parser.add_argument('--dur', default=12, type=int, help='duration in hours')
+    parser.add_argument('--outfile', default='depths.hdf5', help='output file name (default: %(default)s)')
+    parser.add_argument('--lcdir', default='lightcurves', help='lightcurve directory (default: %(default)s)')
+    parser.add_argument('--dur', default=12, type=int, help='duration in hours (default: %(default)s)')
 
     args = parser.parse_args()
 
@@ -77,8 +77,12 @@ if __name__ == '__main__':
             lc = elc.interpolate_lightcurve(elc.extract_lightcurve(f))
             logl, amax, sigma_amax = transit.loglmax_single_transit_timeshifts(lc, elcs, args.dur)
 
-            group.create_group(str(id))
-            lc_group = group[str(id)]
+            if 'temp' in group:
+                del group['temp']
+            group.create_group('temp')
+            lc_group = group['temp']
+
+            lc_group.attrs['kepid'] = id
 
             lc_group.create_dataset('time', compression='gzip', data=lc[:,0])
             lc_group.create_dataset('sap_flux', compression='gzip', data=lc[:,1])
@@ -86,6 +90,13 @@ if __name__ == '__main__':
             lc_group.create_dataset('single_tr_depth', compression='gzip', data=amax)
             lc_group.create_dataset('single_tr_uncert', compression='gzip', data=sigma_amax)
 
+            # Write all this out to disk as "temp"
+            hfile.flush()
+
+            # Rename (hopefully sort-of atomic)
+            group.move('temp', str(id))
+
+            # And flush again.
             hfile.flush()
 
             print 'Saved'
