@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import os
 import os.path as path
+import subprocess
 import transit
 
 def get_files(dir):
@@ -64,6 +65,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    cwd = os.getcwd()
+    try:
+        os.chdir('/Users/farr/Documents/Research/KeplerTrend/code')
+        git_hash = subprocess.check_output(['git', 'show-ref', '--head', '--hash', 'HEAD'])
+    finally:
+        os.chdir(cwd)
+
     files = get_files(args.lcdir)
 
     outdir = os.path.join(args.outdir, '{:02d}'.format(args.dur))
@@ -105,6 +113,7 @@ if __name__ == '__main__':
                 hfile.attrs['tdur_units'] = 'd'
                 hfile.attrs['time_units'] = 'BJD - BJD_ref'
                 hfile.attrs['BJD_ref'] = get_bjdref(f)
+                hfile.attrs['git_hash'] = git_hash
             finally:
                 hfile.close()
 
