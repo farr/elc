@@ -11,7 +11,7 @@ import os.path as path
 import transit
 
 def get_files(dir):
-    files = glob.glob(path.join(dir, '*.fits'))
+    files = glob.glob(path.join(dir, '*llc.fits'))
 
     return files
 
@@ -20,6 +20,13 @@ def get_kepid(f):
         id = file[0].header['KEPLERID']
 
     return id
+
+def get_bjdref(f):
+    with fits.open(f) as file:
+        bjdi = file[1].header['BJDREFI']
+        bjdf = file[1].header['BJDREFF']
+
+    return bjdi + bjdf
 
 def get_elcs(dir, Neigen = 100):
     files = get_files(dir)
@@ -31,73 +38,78 @@ def get_elcs(dir, Neigen = 100):
 
     return elc.elcs(efiles, Neigen=Neigen), ids
 
-def write_elcs(hfile, elcs, ids):
+def write_elcs(outdir, elcs, ids):
+    hfile = h5py.File(os.path.join(outdir, 'elcs.hdf5'), 'w')
     hfile.create_dataset('elcs', compression='gzip', data=elcs)
     hfile.create_dataset('elc_input_ids', compression='gzip', data=np.array(ids))
-    hfile.flush()
+    hfile.close()
+
+def read_elcs(outdir):
+    hfile = h5py.File(os.path.join(outdir, 'elcs.hdf5'), 'r')
+    try:
+        elcs_dset = hfile['elcs']
+        elcs = np.zeros(elcs_dset.shape)
+        elcs_dset.read_direct(elcs)
+    finally:
+        hfile.close()
+
+    return elcs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process a directory of lightcurves into HDF5 single-transit depth file')
 
-    parser.add_argument('--outfile', default='depths.hdf5', help='output file name (default: %(default)s)')
+    parser.add_argument('--outdir', default='depths', help='output directory name (default: %(default)s)')
     parser.add_argument('--lcdir', default='lightcurves', help='lightcurve directory (default: %(default)s)')
     parser.add_argument('--dur', default=12, type=int, help='duration in hours (default: %(default)s)')
 
     args = parser.parse_args()
 
     files = get_files(args.lcdir)
-    hfile = h5py.File(args.outfile)
+
+    outdir = os.path.join(args.outdir, '{:02d}'.format(args.dur))
+    try:
+        os.makedirs(outdir)
+    except:
+        pass
+
+    tdur = args.dur / 24.0 # tdur in days
 
     try:
-        elcs = hfile['elcs']
+        elcs = read_elcs(outdir)
         print 'Loaded ELCs from HDF5'
     except:
         elcs, ids = get_elcs(args.lcdir)
-        write_elcs(hfile, elcs, ids)
+        write_elcs(outdir, elcs, ids)
         print 'Computed and saved ELCs'
-
-    group_name = 'depths{:d}'.format(args.dur)
-
-    try:
-        group = hfile[group_name]
-    except:
-        hfile.create_group(group_name)
-        group = hfile[group_name]
-        group.attrs['tdur'] = args.dur
-        group.attrs['tdur_units'] = 'hours'
 
     for f in files:
         print 'Processing ', f
-        
-        id = get_kepid(f)
 
-        if str(id) in group:
+        indir, fname = os.path.split(f)
+        basename, ext = os.path.splitext(fname)
+        outname = basename.replace('llc', 'std{:02d}'.format(args.dur)) + '.hdf5'
+
+        if os.path.exists(os.path.join(outdir, outname)):
             pass
         else:
             lc = elc.interpolate_lightcurve(elc.extract_lightcurve(f))
-            logl, amax, sigma_amax = transit.loglmax_single_transit_timeshifts(lc, elcs, args.dur)
+            logl, amax, sigma_amax = transit.loglmax_single_transit_timeshifts(lc, elcs, tdur)
 
-            if 'temp' in group:
-                del group['temp']
-            group.create_group('temp')
-            lc_group = group['temp']
+            hfile = h5py.File(os.path.join(outdir, 'temp.hdf5'), 'w')
+            try:
+                hfile.create_dataset('time', compression='gzip', data=lc[:,0])
+                hfile.create_dataset('depth', compression='gzip', data=amax)
+                hfile.create_dataset('depth_uncert', compression='gzip', data=sigma_amax)
+                hfile.attrs['kepid'] = get_kepid(f)
+                hfile.attrs['tdur'] = tdur
+                hfile.attrs['tdur_units'] = 'd'
+                hfile.attrs['time_units'] = 'BJD - BJD_ref'
+                hfile.attrs['BJD_ref'] = get_bjdref(f)
+            finally:
+                hfile.close()
 
-            lc_group.attrs['kepid'] = id
+            os.rename(os.path.join(outdir, 'temp.hdf5'),
+                      os.path.join(outdir, outname))
 
-            lc_group.create_dataset('time', compression='gzip', data=lc[:,0])
-            lc_group.create_dataset('sap_flux', compression='gzip', data=lc[:,1])
-            lc_group.create_dataset('sap_flux_uncert', compression='gzip', data=lc[:,2])
-            lc_group.create_dataset('single_tr_depth', compression='gzip', data=amax)
-            lc_group.create_dataset('single_tr_uncert', compression='gzip', data=sigma_amax)
-
-            # Write all this out to disk as "temp"
-            hfile.flush()
-
-            # Rename (hopefully sort-of atomic)
-            group.move('temp', str(id))
-
-            # And flush again.
-            hfile.flush()
-
-            print 'Saved'
+            print 'Saved as ', outname
             print
