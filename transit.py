@@ -70,7 +70,7 @@ def single_transit_timeshifted_inner_products(x, ts, Tdur):
 
     return ip[:N0]
 
-def loglmax_single_transit_timeshifts(lc, elc, Tdur):
+def single_transit_depth_sigma_timeshifts(lc, elc, Tdur):
 
     ts = lc[:,0]
 
@@ -114,4 +114,4 @@ def loglmax_single_transit_timeshifts(lc, elc, Tdur):
 
     sigma = np.sqrt(logl / (lc.shape[0] - 1 - elc.shape[0]))
 
-    return logl, amax, sigma*sigma_amax
+    return amax, sigma*sigma_amax, bmax
