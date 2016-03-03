@@ -1,6 +1,15 @@
 import fftw3
 import numpy as np
 
+def _next_pow_two(n):
+    n = int(n)
+
+    m = 1
+    while m < n:
+        m = m << 1
+
+    return m
+
 def transit_decrements(ts, P, T0, Tdur):
     """Returns an array of either ``0`` (out of transit) or ``-1`` (in
     transit) for each time in ``ts``.
@@ -36,10 +45,26 @@ def timeshifted_inner_products(x, y):
     :math:`y`. 
 
     """
-    xt = np.fft.fft(x)
-    yt = np.fft.fft(y)
+    x = np.atleast_1d(x)
+    y = np.atleast_1d(y)
 
-    return np.real(np.fft.fft(np.conj(xt)*yt))/x.shape[0]
+    n = x.shape[0]
+    n2 = 2*n
+
+    m = _next_pow_two(n2)
+
+    xe = np.zeros(m)
+    xe[:n] = x
+
+    ye = np.zeros(m)
+    ye[:n] = y
+    
+    xt = np.fft.fft(xe)
+    yt = np.fft.fft(ye)
+
+    result = np.real(np.fft.fft(np.conj(xt)*yt))/m
+
+    return result[:n]
 
 def single_transit_timeshifted_inner_products(x, ts, Tdur):
     """Computes the inner product of the array ``x`` with timeshifted
@@ -52,26 +77,11 @@ def single_transit_timeshifted_inner_products(x, ts, Tdur):
     because it properly handles issues of wraparound in the
     timeshifting.
     """
-    N0 = ts.shape[0]
+    tr = single_transit_decrements(ts, ts[0], Tdur)
 
-    N = 1
-    while N < 2*N0:
-        N = N << 1
-
-    xx = np.zeros(N)
-    xx[:N0] = x
-
-    dt = ts[1] - ts[0]
-    tts = np.linspace(ts[0], (N-1)*dt + ts[0], N)
-
-    tr = single_transit_decrements(tts, ts[0], Tdur)
-
-    ip = timeshifted_inner_products(xx, tr)
-
-    return ip[:N0]
+    return timeshifted_inner_products(x, tr)
 
 def single_transit_depth_sigma_timeshifts(lc, elc, Tdur):
-
     ts = lc[:,0]
 
     t = single_transit_decrements(lc[:,0], lc[0,0], Tdur)
@@ -112,6 +122,6 @@ def single_transit_depth_sigma_timeshifts(lc, elc, Tdur):
 
     sigma_amax = np.sqrt(1.0/(tt - np.sum(Mt*Mt, axis=1)))
 
-    sigma = np.sqrt(logl / (lc.shape[0] - 1 - elc.shape[0]))
+    sigma = np.sqrt(logl / (lc.shape[0]))
 
     return amax, sigma*sigma_amax, bmax

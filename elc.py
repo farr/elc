@@ -44,17 +44,10 @@ def elcs(filelist, Neigen):
     lcmatrix = []
     for f in filelist:
         lc = interpolate_lightcurve(extract_lightcurve(f))
-        # Normalise
-        lc[:,1] -= np.mean(lc[:,1])
-        lc[:,1] /= np.std(lc[:,1])
+        # Normalise to have the same integrated flux
+        lc[:,1] /= sum(lc[:,1])
         lcmatrix.append(lc[:,1])
     lcmatrix = np.array(lcmatrix)
     u, s, v = np.linalg.svd(lcmatrix)
 
-    # Insert the row of ones at the top of v
-    v = np.row_stack((np.ones(v.shape[1]), v[:Neigen,:]))
-
-    uu, ss, vv = np.linalg.svd(v)
-    
-
-    return vv[:(Neigen+1), :]
+    return v[:Neigen,:]
