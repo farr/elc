@@ -1,6 +1,5 @@
 import astropy.io.fits as af
 import numpy as np
-import scipy.interpolate as si
 
 def extract_lightcurve(file):
     """Given a FITS filename containing a Kepler lightcurve, extracts
@@ -28,10 +27,10 @@ def interpolate_lightcurve(lc):
     
     all_ts = np.linspace(ts[0], ts[-1], ts.shape[0])
     
-    sel = ~np.isnan(ys)
+    sel = np.isnan(ys)
     
-    ys = si.interp1d(ts[sel], ys[sel])(all_ts)
-    dys = si.interp1d(ts[sel], dys[sel])(all_ts)
+    ys[sel] = 0.0
+    dys[sel] = 1.0
     
     return np.column_stack((all_ts, ys, dys))
 
